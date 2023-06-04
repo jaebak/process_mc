@@ -1,0 +1,16 @@
+# Create virtual environment
+python3 -m venv py-env
+# Activate virtual environment
+source py-env/bin/activate
+# Install libraries
+pip3 install --upgrade pip
+pip3 install torch==1.8.2 torchvision==0.9.2 torchaudio==0.8.2 --extra-index-url https://download.pytorch.org/whl/lts/1.8/cu111
+pip3 install uproot numpy sklearn matplotlib
+pip3 install transformers
+# Leave virtual environment
+deactivate
+
+
+# Nice reference: https://jduarte.physics.ucsd.edu/capstone-particle-physics-domain/weeks/05-deep-learning.html
+# https://github.com/jmduarte/capstone-particle-physics-domain
+# https://github.com/jmduarte/capstone-particle-physics-domain/blob/5b9f68865fbd32b87e5a29b911aba204ec1b4e12/weeks/utils.py

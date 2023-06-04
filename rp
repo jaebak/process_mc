@@ -1,0 +1,6 @@
+# Run and plot and table for draw_pico
+set -e
+scons
+${@:1} 2>&1 | tee trash_log
+cat trash_log | grep created | awk -F ' ' '{print $6}' | xargs -tI {} imgcat {}
+
