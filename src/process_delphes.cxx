@@ -47,6 +47,16 @@ void init_map(map<string, T> & m_var, T init_value) {
   for (auto var : m_var) m_var[var.first] = init_value;
 }
 
+float calculate_ptt(float photon_pt, float photon_eta, float photon_phi,
+                    float llphoton_pt, float llphoton_eta, float llphoton_phi,
+                    float ll_pt, float ll_eta, float ll_phi) {
+  TVector3 gamma; gamma.SetPtEtaPhi(photon_pt, photon_eta, photon_phi);
+  TVector3 higgs; higgs.SetPtEtaPhi(llphoton_pt, llphoton_eta, llphoton_phi);
+  TVector3 zboson; zboson.SetPtEtaPhi(ll_pt, ll_eta, ll_phi);
+  gamma.SetZ(0); higgs.SetZ(0); zboson.SetZ(0);
+  return higgs.Cross((zboson-gamma).Unit()).Mag();
+}
+
 float Min_dR_gamma_lepton(TLorentzVector const & lead_lep, TLorentzVector const & sublead_lep, TLorentzVector const & gamma) {
   TVector3 lead_lep_p = lead_lep.Vect();
   TVector3 sublead_lep_p = sublead_lep.Vect();
@@ -233,7 +243,7 @@ int main() {
   m_float["label_hzg"] = label_hzg;
 
   // Selection variables
-  fill_map({"ll_m", "ll_pt", "ll_eta", "ll_e", 
+  fill_map({"ll_m", "ll_pt", "ll_eta", "ll_phi", "ll_e", 
             "llg_m", "llg_pt_over_llg_mass", "llg_pt", "llg_eta", "llg_phi", "llg_e", 
             "ll_m_plus_llg_m", "lead_lep_pt", "sublead_lep_pt", 
             "gamma_pt", "gamma_eta", "gamma_phi", "gamma_e", 
@@ -243,9 +253,10 @@ int main() {
   fill_map({"z_charge_sum", "nllg"}, m_int);
 
   // BDT input variables
-  fill_map({"lead_lep_eta", "sublead_lep_eta", "gamma_pt_over_llg_mass", 
+  fill_map({"lead_lep_eta", "sublead_lep_eta", "lead_lep_phi", "sublead_lep_phi",
+            "gamma_pt_over_llg_mass", 
             "min_dR_gamma_lepton", "max_dR_gamma_lepton", 
-            "llg_cosTheta", "llg_costheta", "llg_Phi", 
+            "llg_cosTheta", "llg_costheta", "llg_Phi", "llg_ptt",
             "gamma_id", "gamma_pt_error_over_gamma_pt", }, m_float);
 
   // MC true variables
@@ -270,8 +281,6 @@ int main() {
   set_branch(m_int, out_tree);
   set_branch(m_long64, out_tree);
   set_branch(m_float, out_tree);
-
-  TRandom3 * random = new TRandom3();
 
   // Event loop
   cout<<"Starting event loop (events="<<numberOfEntries<<")"<<endl;
@@ -300,6 +309,7 @@ int main() {
     //}
 
 
+    //cout<<"mc"<<endl;
     // MC true
     GenParticle * gen_h = 0;
     GenParticle * gen_z = 0;
@@ -475,6 +485,7 @@ int main() {
       h_gamma_true_eta->Fill(gen_gamma->Eta);
     }
 
+    //cout<<"object"<<endl;
 
     // Select muons
     vector<int> muon_idx_array;
@@ -528,6 +539,10 @@ int main() {
       //cout<<"best photon idx: "<<best_photon_idx<<endl;
       break;
     }
+    Photon * photon = 0;
+    if (best_photon_idx != -1) photon = static_cast<Photon*>(branchPhoton->At(best_photon_idx));
+
+    //cout<<"recon"<<endl;
 
     // Reconstruct Z candidate
     vector<TLorentzVector> z_p4_array;
@@ -606,6 +621,7 @@ int main() {
       //cout<<"[idx="<<iZ<<"] Best z idx: "<<best_z_idx<<" mass: "<<best_z_mass<<endl;
     }
 
+    //cout<<"org data"<<endl;
     // Organize data for best reconstructed z
     Muon * muon_plus;
     Muon * muon_minus;
@@ -647,14 +663,13 @@ int main() {
       ll_p4 = z_p4_array[static_cast<unsigned>(best_z_idx)];
     }
 
-    Photon * photon;
     TLorentzVector llg_p4;
     if (best_z_idx != -1 && best_photon_idx != -1) {
       // Z features: charge_sum, e_or_mu (0:e, 1:mu), lead_lepton_charge, sublead_lepton_charge, lead_lepton_idx, sublead_lepton_idx
-      photon = static_cast<Photon*>(branchPhoton->At(best_photon_idx));
       llg_p4 = ll_p4 + photon->P4();
     }
 
+    //cout<<"fill objects"<<endl;
     if (best_z_idx != -1 && best_photon_idx != -1) {
       // Fill tree variables
       m_int["e_or_mu"] = get<1>(z_feature);
@@ -676,6 +691,7 @@ int main() {
       m_float["gamma_e"] = photon->E;
       m_float["gamma_e_over_llg_m"] = photon->E / m_float["llg_m"];
       m_float["gamma_pt_over_llg_mass"] = photon->PT / m_float["llg_m"];
+      m_float["llg_ptt"] = calculate_ptt(m_float["gamma_pt"], m_float["gamma_eta"], m_float["gamma_phi"], m_float["llg_pt"], m_float["llg_eta"], m_float["llg_phi"], m_float["ll_pt"], m_float["ll_eta"], m_float["ll_phi"]);
       m_int["nllg"] = 1;
       if (photon->SumPt < 0.00001) m_float["gamma_id"] = 0;
       else m_float["gamma_id"] = photon->SumPtNeutral / photon->SumPt;
@@ -689,8 +705,10 @@ int main() {
         m_float["lep_minus_phi"] = muon_minus->Phi;
         m_float["lep_minus_e"] = muon_minus->P4().E();
         m_float["lead_lep_pt"] = lead_muon->PT;
+        m_float["lead_lep_phi"] = lead_muon->Phi;
         m_float["lead_lep_eta"] = lead_muon->Eta;
         m_float["sublead_lep_pt"] = sublead_muon->PT;
+        m_float["sublead_lep_phi"] = sublead_muon->Phi;
         m_float["sublead_lep_eta"] = sublead_muon->Eta;
         m_float["min_dR_gamma_lepton"] = Min_dR_gamma_lepton(lead_muon->P4(), sublead_muon->P4(), photon->P4());
         m_float["max_dR_gamma_lepton"] = Max_dR_gamma_lepton(lead_muon->P4(), sublead_muon->P4(), photon->P4());
@@ -708,8 +726,10 @@ int main() {
         m_float["lep_minus_phi"] = electron_minus->Phi;
         m_float["lep_minus_e"] = electron_minus->P4().E();
         m_float["lead_lep_pt"] = lead_electron->PT;
+        m_float["lead_lep_phi"] = lead_electron->Phi;
         m_float["lead_lep_eta"] = lead_electron->Eta;
         m_float["sublead_lep_pt"] = sublead_electron->PT;
+        m_float["sublead_lep_phi"] = sublead_electron->Phi;
         m_float["sublead_lep_eta"] = sublead_electron->Eta;
         m_float["min_dR_gamma_lepton"] = Min_dR_gamma_lepton(lead_electron->P4(), sublead_electron->P4(), photon->P4());
         m_float["max_dR_gamma_lepton"] = Max_dR_gamma_lepton(lead_electron->P4(), sublead_electron->P4(), photon->P4());
@@ -746,6 +766,7 @@ int main() {
       h_llg_Phi->Fill(m_float["llg_Phi"]);
     } // end of filling z and g
 
+    //cout<<"fill gen res"<<endl;
     if (gen_z!=0 && gen_lep_plus!=0 && gen_lep_minus!=0 && best_z_idx != -1) {
       // Compare between rec_l and tru_l
       z_feature = z_feature_array[static_cast<unsigned>(best_z_idx)];
@@ -789,6 +810,8 @@ int main() {
       //cout<<"z PID: "<<gen_z->PID<<" deta: "<<m_float["z_eta_res"]<<" phi: "<<m_float["z_phi_res"]<<" dr: "<<m_float["z_dr"]<<" pt: "<<m_float["z_pt_res"]<<" mass: "<<m_float["z_mass_res"]<<endl;
     }
 
+    //cout<<"rec photon and tru photon"<<endl;
+
     // Compare between rec_photon and tru_photon
     if (best_photon_idx != -1 && gen_gamma!=0) {
       m_float["photon_pt_res"] = photon->PT - gen_gamma->PT;
@@ -798,8 +821,10 @@ int main() {
       //cout<<"photon deta: "<<photon_eta_res<<" dphi: "<<photon_phi_res<<" dr: "<<photon_dr<<" dpt: "<<photon_pt_res<<endl;
     }
 
+    //cout<<"rec llg and tru higgs"<<endl;
+
     // Compare between rec_llg and true_higgs
-    if (gen_z!=0 && gen_lep_plus!=0 && gen_lep_minus!=0 && gen_gamma!=0 && best_z_idx != -1 && best_photon_idx != -1) {
+    if (gen_h!=0 && gen_lep_plus!=0 && gen_lep_minus!=0 && gen_gamma!=0 && best_z_idx != -1 && best_photon_idx != -1) {
       m_float["h_pt_res"] = llg_p4.Pt() - gen_h->PT;
       m_float["h_eta_res"] = llg_p4.Eta() - gen_h->Eta;
       m_float["h_phi_res"] = TVector2::Phi_mpi_pi(llg_p4.Phi() - gen_h->Phi);
@@ -808,11 +833,13 @@ int main() {
       //cout<<"h deta: "<<m_float["h_eta_res"]<<" dphi: "<<m_float["h_phi_res"]<<" dr: "<<m_float["h_dr"]<<" dpt: "<<m_float["h_pt_res"]<<" dm: "<<m_float["h_mass_res"]<<endl;
     }
 
+    //cout<<"fill tree"<<endl;
 
-    if ((best_z_idx != -1 && best_photon_idx != -1)||(gen_z!=0 && gen_lep_plus!=0 && gen_lep_minus!=0 && gen_gamma!=0) ){
-      //cout<<"e_or_mu: "<<m_int["e_or_mu"]<<endl;
-      out_tree->Fill();
-    }
+    out_tree->Fill();
+    //if ((best_z_idx != -1 && best_photon_idx != -1)||(gen_z!=0 && gen_lep_plus!=0 && gen_lep_minus!=0 && gen_gamma!=0) ){
+    //  //cout<<"e_or_mu: "<<m_int["e_or_mu"]<<endl;
+    //  out_tree->Fill();
+    //}
 
     if ((debug_print && entry == 3) || (max_events == entry) ) break;
 
