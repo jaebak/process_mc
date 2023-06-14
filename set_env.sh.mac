@@ -1,0 +1,6 @@
+source ~/Linux/root-6.26.10/bin/thisroot.sh
+export SET_ENV_PATH=set_env.sh.mac
+#export DYLD_LIBRARY_PATH=${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}:/Users/jbkim/Work/analysis/process_mc/lib
+export ROOT_INCLUDE_PATH=external_inc${ROOT_INCLUDE_PATH:+:${ROOT_INCLUDE_PATH}}
+
+export DYLD_LIBRARY_PATH=/System/Library/Frameworks/ImageIO.framework/Versions/A/Resources:/usr/lib:/opt/local/lib:/Users/jbkim/Linux/root-6.26.10/lib:/Users/jbkim/Linux/lib:/Users/jbkim/Work/analysis/process_mc/lib
