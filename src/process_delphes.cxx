@@ -2,6 +2,7 @@
 #include <vector>
 #include <string>
 #include <tuple>
+#include <getopt.h>
 
 #include "TROOT.h"
 #include "TSystem.h"
@@ -29,6 +30,8 @@ using std::max;
 using std::make_tuple;
 using std::get;
 using std::map;
+
+void GetOptions(int argc, char *argv[]);
 
 template<typename T>
 void fill_map(vector<string> const & names, map<string, T> & m_var) {
@@ -114,9 +117,20 @@ void print_particle(GenParticle* genParticle, int iParticle) {
   cout<<"iParticle: "<<iParticle<<" PID: "<<genParticle->PID<<" status: "<<genParticle->Status<<" IsPU: "<<genParticle->IsPU<<" M1: "<<genParticle->M1<<" M2: "<<genParticle->M2<<" D1: "<<genParticle->D1<<" D2: "<<genParticle->D2<<" m: "<<genParticle->Mass<<" (e,px,py,pz): "<<genParticle->E<<" "<<genParticle->Px<<" "<<genParticle->Py<<" "<<genParticle->Pz<<endl;
 }
 
-int main() {
+namespace{
+  //string input_path = "~/delphes_madgraph/madgraph_delphes_generate/ZG_ZToLL/Events/run_02/tag_1_delphes3.root";
+  //string output_path = "ntuple_ZG_ZToLL_run02.root";
+  //Int_t label = 1;
+
+  string input_path = "~/delphes_madgraph/madgraph_delphes_generate/ggH_HToZG_ZToLL/Events/run_02/tag_1_delphes3.root";
+  string output_path = "ntuple_ggH_HToZG_ZToLL_run02.root";
+  Int_t label = 2;
+}
+
+int main(int argc, char *argv[]){
   time_t begtime, endtime;
   time(&begtime);
+  GetOptions(argc, argv);
 
   gROOT->SetBatch(kTRUE);
   //gSystem->Load("libDelphes");
@@ -181,13 +195,22 @@ int main() {
   //string output_filename = "madgraph_delphes_recon_ntuples/ZG_ZToLL.root";
   //Int_t label_llg = 0; Int_t label_hzg = 1; Int_t label_dy = 0;
 
-  //string path = "ntuples/ZG_ZToLL_delphes3.root";
-  //string output_filename = "ntuple_ZG_ZToLL.root";
-  //Int_t label_llg = 1; Int_t label_hzg = 0; Int_t label_dy = 0;
+  Int_t label_llg = 0; Int_t label_hzg = 0; Int_t label_dy = 0;
 
-  string path = "ntuples/ggH_HToZG_ZToLL_delphes3.root";
-  string output_filename = "ntuple_ggH_HToZG_ZToLL.root";
-  Int_t label_llg = 0; Int_t label_hzg = 1; Int_t label_dy = 0;
+  //string path = "~/delphes_madgraph/madgraph_delphes_generate/ZG_ZToLL/Events/run_02/tag_1_delphes3.root";
+  //string output_filename = "ntuple_ZG_ZToLL_run02.root";
+  //label_llg = 1;
+
+  //string path = "~/delphes_madgraph/madgraph_delphes_generate/ggH_HToZG_ZToLL/Events/run_02/tag_1_delphes3.root";
+  //string output_filename = "ntuple_ggH_HToZG_ZToLL_run02.root";
+  //label_hzg = 1;
+
+  string path = input_path;
+  string output_filename = output_path;
+  if (label == 0) label_dy = 1;
+  else if (label == 1) label_llg = 1;
+  else if (label == 2) label_hzg = 1;
+
 
   string treeName = "Delphes";
   TChain * chain = new TChain(treeName.c_str());
@@ -623,12 +646,12 @@ int main() {
 
     //cout<<"org data"<<endl;
     // Organize data for best reconstructed z
-    Muon * muon_plus;
-    Muon * muon_minus;
-    Electron * electron_plus;
-    Electron * electron_minus;
+    Muon * muon_plus = 0;
+    Muon * muon_minus = 0;
+    Electron * electron_plus = 0;
+    Electron * electron_minus = 0;
     tuple<int, int, int, int, int, int> z_feature;
-    int e_or_mu;
+    int e_or_mu = 0;
     if (best_z_idx != -1) {
       z_feature = z_feature_array[static_cast<unsigned>(best_z_idx)];
       e_or_mu = get<1>(z_feature);
@@ -963,4 +986,41 @@ int main() {
   time(&endtime); 
   cout<<endl<<"Took "<<difftime(endtime, begtime)<<" seconds"<<endl<<endl;
   return 0;
+}
+
+void GetOptions(int argc, char *argv[]){
+  while(true){
+    static struct option long_options[] = {
+      {"input", required_argument, 0, 'i'},
+      {"output", required_argument, 0, 'o'},
+      {"label", required_argument, 0, 'l'},
+      {0, 0, 0, 0}
+    };
+
+    char opt = -1;
+    int option_index;
+    opt = getopt_long(argc, argv, "i:o:l:", long_options, &option_index);
+
+    if( opt == -1) break;
+
+    string optname;
+    switch(opt){
+    case 'i':
+      input_path = optarg;
+      break;
+    case 'o':
+      output_path = optarg;
+      break;
+    case 'l':
+      label = atoi(optarg);
+      break;
+    case 0:
+      optname = long_options[option_index].name;
+      printf("Bad option! Found option name %s\n", optname.c_str());
+      break;
+    default:
+      printf("Bad option! getopt_long returned character code 0%o\n", opt);
+      break;
+    }
+  }
 }
