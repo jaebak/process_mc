@@ -11,6 +11,7 @@
 #include "TTreeReader.h"
 #include "TCanvas.h"
 #include "TLorentzVector.h"
+#include "Math/Vector4D.h"
 #include "TRandom3.h"
 
 #include "classes/DelphesClasses.h"
@@ -30,6 +31,8 @@ using std::max;
 using std::make_tuple;
 using std::get;
 using std::map;
+using ROOT::Math::LorentzVector;
+using ROOT::Math::PtEtaPhiM4D;
 
 void GetOptions(int argc, char *argv[]);
 
@@ -115,6 +118,31 @@ vector<GenParticle* > getDaughters(GenParticle * particle, TClonesArray * branch
 
 void print_particle(GenParticle* genParticle, int iParticle) {
   cout<<"iParticle: "<<iParticle<<" PID: "<<genParticle->PID<<" status: "<<genParticle->Status<<" IsPU: "<<genParticle->IsPU<<" M1: "<<genParticle->M1<<" M2: "<<genParticle->M2<<" D1: "<<genParticle->D1<<" D2: "<<genParticle->D2<<" m: "<<genParticle->Mass<<" (e,px,py,pz): "<<genParticle->E<<" "<<genParticle->Px<<" "<<genParticle->Py<<" "<<genParticle->Pz<<endl;
+}
+
+// pT resolution
+float get_electron_resolution(float pt, float eta) {
+  float res =          (fabs(eta) <= 0.5) * (pt > 0.1) * TMath::Sqrt(pow(0.03,2) + pow(pt,2)*pow(1.3e-3,2)) +
+    (fabs(eta) > 0.5 && fabs(eta) <= 1.5) * (pt > 0.1) * TMath::Sqrt(pow(0.05,2) + pow(pt,2)*pow(1.7e-3,2)) +
+    (fabs(eta) > 1.5 && fabs(eta) <= 2.5) * (pt > 0.1) * TMath::Sqrt(pow(0.15,2) + pow(pt,2)*pow(3.1e-3,2));
+  res = (res > 1.0) ? 1.0 : res;
+  return pt * res;  
+}
+
+// pT resolution
+float get_muon_resolution(float pt, float eta) {
+ float res =           (fabs(eta) <= 0.5) * (pt > 0.1) * TMath::Sqrt(pow(0.01,2) + pow(pt,2)*pow(1.0e-4,2)) +
+    (fabs(eta) > 0.5 && fabs(eta) <= 1.5) * (pt > 0.1) * TMath::Sqrt(pow(0.015,2) + pow(pt,2)*pow(1.5e-4,2)) +
+    (fabs(eta) > 1.5 && fabs(eta) <= 2.5) * (pt > 0.1) * TMath::Sqrt(pow(0.025,2) + pow(pt,2)*pow(3.5e-4,2));
+  res = (res > 1.0) ? 1.0 : res;
+  return pt * res;
+}
+
+// Energy resolution
+float get_photon_resolution(float eta, float energy) {
+  return                    (fabs(eta) <= 1.5) * (1+0.64*pow(eta,2)) * TMath::Sqrt(pow(energy,2)*pow(0.008,2) + energy*pow(0.11,2) + pow(0.40,2)) +
+         (fabs(eta) > 1.5 && fabs(eta) <= 2.5) * (2.16 + 5.6*pow((fabs(eta)-2),2)) * TMath::Sqrt(pow(energy,2)*pow(0.008,2) + energy*pow(0.11,2) + pow(0.40,2)) +
+         (fabs(eta) > 2.5 && fabs(eta) <= 5.0) * TMath::Sqrt(pow(energy,2)*pow(0.107,2) + energy*pow(2.08,2));
 }
 
 namespace{
@@ -267,11 +295,13 @@ int main(int argc, char *argv[]){
 
   // Selection variables
   fill_map({"ll_m", "ll_pt", "ll_eta", "ll_phi", "ll_e", 
-            "llg_m", "llg_pt_over_llg_mass", "llg_pt", "llg_eta", "llg_phi", "llg_e", 
-            "ll_m_plus_llg_m", "lead_lep_pt", "sublead_lep_pt", 
-            "gamma_pt", "gamma_eta", "gamma_phi", "gamma_e", 
-            "lep_plus_pt", "lep_plus_eta", "lep_plus_phi", "lep_plus_e", 
-            "lep_minus_pt", "lep_minus_eta", "lep_minus_phi", "lep_minus_e", 
+            "llg_m", 
+            "llg_m_resolution", "llg_m_lead_lep_delta", "llg_m_sublead_lep_delta", "llg_m_photon_delta",
+            "llg_pt_over_llg_mass", "llg_pt", "llg_eta", "llg_phi", "llg_e", 
+            "ll_m_plus_llg_m", "lead_lep_pt", "lead_lep_pt_resolution", "sublead_lep_pt", "sublead_lep_pt_resolution",
+            "gamma_pt", "gamma_eta", "gamma_phi", "gamma_e", "gamma_e_resolution",
+            "lep_plus_pt", "lep_plus_pt_resolution", "lep_plus_eta", "lep_plus_phi", "lep_plus_e", 
+            "lep_minus_pt", "lep_minus_pt_resolution", "lep_minus_eta", "lep_minus_phi", "lep_minus_e", 
             "gamma_e_over_llg_m"}, m_float);
   fill_map({"z_charge_sum", "nllg"}, m_int);
 
@@ -298,7 +328,7 @@ int main(int argc, char *argv[]){
   fill_map({"lep_charge_res", "lep_plus_pt_res", "lep_plus_eta_res", "lep_plus_phi_res", "lep_plus_e_res", "lep_plus_dr",
             "lep_minus_pt_res", "lep_minus_eta_res", "lep_minus_phi_res", "lep_minus_e_res", "lep_minus_dr",
             "z_pt_res", "z_eta_res", "z_phi_res", "z_dr", "z_mass_res",
-            "photon_pt_res", "photon_eta_res", "photon_phi_res", "photon_dr", 
+            "photon_pt_res", "photon_eta_res", "photon_phi_res", "photon_e_res", "photon_dr", 
             "h_pt_res", "h_eta_res", "h_phi_res", "h_dr", "h_mass_res" }, m_float);
 
   set_branch(m_int, out_tree);
@@ -712,6 +742,7 @@ int main(int argc, char *argv[]){
       m_float["gamma_eta"] = photon->Eta;
       m_float["gamma_phi"] = photon->Phi;
       m_float["gamma_e"] = photon->E;
+      m_float["gamma_e_resolution"] = get_photon_resolution(photon->Eta, photon->E);
       m_float["gamma_e_over_llg_m"] = photon->E / m_float["llg_m"];
       m_float["gamma_pt_over_llg_mass"] = photon->PT / m_float["llg_m"];
       m_float["llg_ptt"] = calculate_ptt(m_float["gamma_pt"], m_float["gamma_eta"], m_float["gamma_phi"], m_float["llg_pt"], m_float["llg_eta"], m_float["llg_phi"], m_float["ll_pt"], m_float["ll_eta"], m_float["ll_phi"]);
@@ -720,17 +751,21 @@ int main(int argc, char *argv[]){
       else m_float["gamma_id"] = photon->SumPtNeutral / photon->SumPt;
       if (m_int["e_or_mu"] == 1) {
         m_float["lep_plus_pt"] = muon_plus->PT;
+        m_float["lep_plus_pt_resolution"] = get_muon_resolution(muon_plus->PT,muon_plus->Eta);
         m_float["lep_plus_eta"] = muon_plus->Eta;
         m_float["lep_plus_phi"] = muon_plus->Phi;
         m_float["lep_plus_e"] = muon_plus->P4().E();
         m_float["lep_minus_pt"] = muon_minus->PT;
+        m_float["lep_minus_pt_resolution"] = get_muon_resolution(muon_minus->PT,muon_minus->Eta);
         m_float["lep_minus_eta"] = muon_minus->Eta;
         m_float["lep_minus_phi"] = muon_minus->Phi;
         m_float["lep_minus_e"] = muon_minus->P4().E();
         m_float["lead_lep_pt"] = lead_muon->PT;
+        m_float["lead_lep_pt_resolution"] = get_muon_resolution(lead_muon->PT,lead_muon->Eta);
         m_float["lead_lep_phi"] = lead_muon->Phi;
         m_float["lead_lep_eta"] = lead_muon->Eta;
         m_float["sublead_lep_pt"] = sublead_muon->PT;
+        m_float["sublead_lep_pt_resolution"] = get_muon_resolution(sublead_muon->PT,sublead_muon->Eta);
         m_float["sublead_lep_phi"] = sublead_muon->Phi;
         m_float["sublead_lep_eta"] = sublead_muon->Eta;
         m_float["min_dR_gamma_lepton"] = Min_dR_gamma_lepton(lead_muon->P4(), sublead_muon->P4(), photon->P4());
@@ -741,17 +776,21 @@ int main(int argc, char *argv[]){
       } else {
         // Electron
         m_float["lep_plus_pt"] = electron_plus->PT;
+        m_float["lep_plus_pt_resolution"] = get_electron_resolution(electron_plus->PT,electron_plus->Eta);
         m_float["lep_plus_eta"] = electron_plus->Eta;
         m_float["lep_plus_phi"] = electron_plus->Phi;
         m_float["lep_plus_e"] = electron_plus->P4().E();
         m_float["lep_minus_pt"] = electron_minus->PT;
+        m_float["lep_minus_pt_resolution"] = get_electron_resolution(electron_minus->PT,electron_minus->Eta);
         m_float["lep_minus_eta"] = electron_minus->Eta;
         m_float["lep_minus_phi"] = electron_minus->Phi;
         m_float["lep_minus_e"] = electron_minus->P4().E();
         m_float["lead_lep_pt"] = lead_electron->PT;
+        m_float["lead_lep_pt_resolution"] = get_electron_resolution(lead_electron->PT,lead_electron->Eta);
         m_float["lead_lep_phi"] = lead_electron->Phi;
         m_float["lead_lep_eta"] = lead_electron->Eta;
         m_float["sublead_lep_pt"] = sublead_electron->PT;
+        m_float["sublead_lep_pt_resolution"] = get_electron_resolution(sublead_electron->PT,sublead_electron->Eta);
         m_float["sublead_lep_phi"] = sublead_electron->Phi;
         m_float["sublead_lep_eta"] = sublead_electron->Eta;
         m_float["min_dR_gamma_lepton"] = Min_dR_gamma_lepton(lead_electron->P4(), sublead_electron->P4(), photon->P4());
@@ -759,6 +798,32 @@ int main(int argc, char *argv[]){
         m_float["llg_cosTheta"] = llg::get_cosTheta(electron_minus->P4(), electron_plus->P4(), photon->P4());
         m_float["llg_costheta"] = llg::get_costheta(electron_minus->P4(), electron_plus->P4(), photon->P4());
         m_float["llg_Phi"] = llg::get_phi(electron_minus->P4(), electron_plus->P4(), photon->P4());
+      }
+      // Calculate mass resolution
+      {
+        LorentzVector<PtEtaPhiM4D<double> > p4_lead_lep; 
+        LorentzVector<PtEtaPhiM4D<double> > p4_sublead_lep; 
+        LorentzVector<PtEtaPhiM4D<double> > p4_lead_lep_delta; 
+        LorentzVector<PtEtaPhiM4D<double> > p4_sublead_lep_delta; 
+        if (m_int["e_or_mu"] == 1) { // muon
+          p4_lead_lep.SetCoordinates(lead_muon->PT,lead_muon->Eta,lead_muon->Phi,0.10566);
+          p4_sublead_lep.SetCoordinates(sublead_muon->PT,sublead_muon->Eta,sublead_muon->Phi,0.10566);
+          p4_lead_lep_delta.SetCoordinates(lead_muon->PT+m_float["lead_lep_pt_resolution"],lead_muon->Eta,lead_muon->Phi,0.10566);
+          p4_sublead_lep_delta.SetCoordinates(sublead_muon->PT+m_float["sublead_lep_pt_resolution"],sublead_muon->Eta,sublead_muon->Phi,0.10566);
+        } else { // electron
+          p4_lead_lep.SetCoordinates(lead_electron->PT,lead_electron->Eta,lead_electron->Phi,0.000511);
+          p4_sublead_lep.SetCoordinates(sublead_electron->PT,sublead_electron->Eta,sublead_electron->Phi,0.000511);
+          p4_lead_lep_delta.SetCoordinates(lead_electron->PT+m_float["lead_lep_pt_resolution"],lead_electron->Eta,lead_electron->Phi,0.000511);
+          p4_sublead_lep_delta.SetCoordinates(sublead_electron->PT+m_float["sublead_lep_pt_resolution"],sublead_electron->Eta,sublead_electron->Phi,0.000511);
+        }
+        LorentzVector<PtEtaPhiM4D<double> > p4_photon (photon->PT,photon->Eta,photon->Phi,0.);
+        float photon_pt_resolution = m_float["gamma_e_resolution"] * photon->PT / photon->E;
+        LorentzVector<PtEtaPhiM4D<double> > p4_photon_delta (photon->PT+photon_pt_resolution,photon->Eta,photon->Phi,0.);
+        float nominal_mass = (p4_lead_lep + p4_sublead_lep + p4_photon).mass();
+        m_float["llg_m_lead_lep_delta"] = (p4_lead_lep_delta + p4_sublead_lep + p4_photon).mass() - nominal_mass;
+        m_float["llg_m_sublead_lep_delta"] = (p4_lead_lep + p4_sublead_lep_delta + p4_photon).mass() - nominal_mass;
+        m_float["llg_m_photon_delta"] = (p4_lead_lep + p4_sublead_lep + p4_photon_delta).mass() - nominal_mass;
+        m_float["llg_m_resolution"] = TMath::Sqrt(pow(m_float["llg_m_lead_lep_delta"],2)+pow(m_float["llg_m_sublead_lep_delta"],2)+pow(m_float["llg_m_photon_delta"],2));
       }
 
 
@@ -840,6 +905,7 @@ int main(int argc, char *argv[]){
       m_float["photon_pt_res"] = photon->PT - gen_gamma->PT;
       m_float["photon_eta_res"] = photon->Eta - gen_gamma->Eta;
       m_float["photon_phi_res"] = TVector2::Phi_mpi_pi(photon->Phi - gen_gamma->Phi);
+      m_float["photon_e_res"] = photon->E - gen_gamma->E;
       m_float["photon_dr"] = TMath::Sqrt(m_float["photon_eta_res"]*m_float["photon_eta_res"]+m_float["photon_phi_res"]*m_float["photon_phi_res"]);
       //cout<<"photon deta: "<<photon_eta_res<<" dphi: "<<photon_phi_res<<" dr: "<<photon_dr<<" dpt: "<<photon_pt_res<<endl;
     }
